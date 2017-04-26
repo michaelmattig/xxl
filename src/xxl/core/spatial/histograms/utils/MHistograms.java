@@ -38,6 +38,7 @@ import java.util.Properties;
 
 import xxl.core.collections.containers.Container;
 import xxl.core.collections.containers.CounterContainer;
+import xxl.core.collections.containers.MapContainer;
 import xxl.core.collections.containers.io.BlockFileContainer;
 import xxl.core.collections.containers.io.ConverterContainer;
 import xxl.core.collections.queues.Queue;
@@ -224,15 +225,20 @@ public class MHistograms {
 		 */
 		DefaultArrayProcessor arrayProcessor = null;
 		
+		protected Container queueContainer;
+		
 		/**
 		 * sets properties
 		 */
 		protected void setProperties(Properties props){
 			try{
-				bitProDim = new Integer(props.getProperty(RTREE_BITS, "31")); //
+				dimension = new Integer(props.getProperty(RTREE_DIMENSION, "2")); // default value
+				
+				bitProDim = new Integer(props.getProperty(RTREE_BITS, Integer.toString(63/dimension))); //
+				
 				precision = 1 << (bitProDim-1);
 				blockSize = new Integer(props.getProperty(RTREE_BLOCK_SIZE, "4096")); // default value
-				dimension = new Integer(props.getProperty(RTREE_DIMENSION, "2")); // default value
+				
 				converter = new ConvertableConverter<DoublePointRectangle>(SpatialUtils.factoryFunction(dimension));// default 2D Converter
 				comparator = (dimension == 2 ) ? 
 						SpatialUtils.getHilbert2DComparator(SpatialUtils.universeUnit(dimension),precision) :
@@ -271,6 +277,8 @@ public class MHistograms {
 				ProcessingType pType = (bulkLoad == GOPT_BULKLOAD) ? ProcessingType.GOPT : ProcessingType.SOPT_F;
 				tree = buildExtRtree(sortedRectangles, pType);
 			}
+			sortedRectangles.close();
+			queueContainer.close();
 			histogram = SpatialUtils.computeSimpleRTreeHistogram(tree, numberOfBuckets);
 		}
 		
@@ -281,7 +289,8 @@ public class MHistograms {
 		 */
 		@SuppressWarnings({ "deprecation", "serial", "unchecked" })
 		protected Cursor<DoublePointRectangle> sortData(Cursor<DoublePointRectangle> rectangles){
-			final Container queueContainer = new BlockFileContainer(sortpath + "tmpsortqueue.tmp" , 4096);
+//			queueContainer = new BlockFileContainer(sortpath + "tmpsortqueue.tmp" , 4096);
+			queueContainer = new MapContainer();
 			final Function<Function<?, Integer>, Queue<?>> queueFunction =
 					new AbstractFunction<Function<?, Integer>, Queue<?>>() {
 					public Queue<?> invoke(Function<?, Integer> function1, Function<?, Integer> function2) {
@@ -303,7 +312,8 @@ public class MHistograms {
 		 */
 		protected RTree buildSimpleRtree(Cursor<DoublePointRectangle> rectCursor){
 			RTree sortBasedRTree = new RTree();
-			CounterContainer treeCounter = new CounterContainer(new BlockFileContainer(rtreePath, blockSize));
+//			CounterContainer treeCounter = new CounterContainer(new BlockFileContainer(rtreePath, blockSize));
+			CounterContainer treeCounter = new CounterContainer(new MapContainer());
 			Container treeContainer =  new ConverterContainer(treeCounter,	 sortBasedRTree.nodeConverter(converter, dimension));
 			sortBasedRTree.initialize(dataDescriptor, treeContainer,
 					blockSize, (8*2*dimension) + 4, (8*2*dimension) + 8, 0.33);
@@ -354,7 +364,9 @@ public class MHistograms {
 		 */
 		protected RTree buildExtRtree(Cursor<DoublePointRectangle> rectCursor, xxl.core.indexStructures.rtrees.RtreeIterativeBulkloader.ProcessingType pType) throws IOException{
 			RTree sortBasedRTree = new RTree();
-			Container treeContainer =  new ConverterContainer( new BlockFileContainer(rtreePath, blockSize), 
+//			Container treeContainer =  new ConverterContainer( new BlockFileContainer(rtreePath, blockSize), 
+//					sortBasedRTree.nodeConverter(Rectangles.getDoublePointRectangleConverter(dimension), dimension));
+			Container treeContainer =  new ConverterContainer( new MapContainer(), 
 					sortBasedRTree.nodeConverter(Rectangles.getDoublePointRectangleConverter(dimension), dimension));
 			sortBasedRTree.determineContainer = new Constant<Object>(treeContainer);
 			sortBasedRTree.getContainer =new Constant<Object>(treeContainer);
@@ -452,6 +464,8 @@ public class MHistograms {
 			if(tree == null){
 				sortedRectangles = sortData(rectangles);
 				tree = buildExtRtree(sortedRectangles, ProcessingType.GOPT);
+				sortedRectangles.close();
+				queueContainer.close();
 			}
 			int count = Cursors.count(SpatialUtils.getRectanglesLevel1(tree));
 			if(count <= numberOfBuckets){
