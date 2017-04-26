@@ -143,7 +143,7 @@ public class GenericPartitioner {
 	 * @return
 	 */
 	public static int[] getDistribution(Bucket bucket){
-		int[] array = new int[bucket.number];
+		int[] array = new int[bucket == null ? 0 : bucket.number];
 		Bucket next = bucket;
 		for(int i = array.length-1; i >= 0 ; i--){
 			array[i] = next.end  - next.start  +1;
