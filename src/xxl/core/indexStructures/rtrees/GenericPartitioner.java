@@ -271,7 +271,7 @@ public class GenericPartitioner {
 				}else if (t-j > 0){
 					Bucket candidate = costArray[t-j-1];
 					double costOfBucket  = costs[j];
-					double costOfExtension = candidate.cost + costOfBucket;
+					double costOfExtension = (candidate == null ? Double.MAX_VALUE : candidate.cost) + costOfBucket;
 					if(costOfExtension < mincost){
 						// overwrite
 						argMin = candidate;
